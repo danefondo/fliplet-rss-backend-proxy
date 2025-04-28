@@ -1,3 +1,4 @@
+// server.js
 const express = require("express");
 const fetch = require("node-fetch");
 const puppeteer = require("puppeteer");
@@ -5,9 +6,16 @@ const puppeteer = require("puppeteer");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const CHROME_PATH = process.env.CHROME_FOR_TESTING || process.env.GOOGLE_CHROME_BIN;
+const CHROME_PATH =
+  process.env.CHROME_FOR_TESTING || // new chrome-for-testing buildpack
+  process.env.GOOGLE_CHROME_BIN || // old google-chrome buildpack
+  process.env.CHROME_PATH ||
+  "/app/.chrome-for-testing/chrome-linux64/chrome"; // worst-case fallback
 
 app.get("/rss", async (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
   const feedUrl = req.query.url;
   if (!feedUrl) {
     return res.status(400).send("Missing ?url parameter");
@@ -19,7 +27,7 @@ app.get("/rss", async (req, res) => {
     if (feedUrl.includes("fliplet.com/feed")) {
       const browser = await puppeteer.launch({
         executablePath: CHROME_PATH,
-        args: ["--no-sandbox", "--disable-setuid-sandbox"],
+        args: ["--headless", "--no-sandbox", "--disable-setuid-sandbox"],
         headless: true,
       });
       const page = await browser.newPage();
@@ -34,11 +42,10 @@ app.get("/rss", async (req, res) => {
       xml = await upstream.text();
     }
 
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.type("application/xml; charset=utf-8");
-    res.send(xml);
+    res.status(200).type("application/xml; charset=utf-8").send(xml);
   } catch (err) {
     console.error("Fetch error:", err);
+
     res.status(502).type("application/xml; charset=utf-8").send(`<error>Fetch failed: ${err.message}</error>`);
   }
 });
